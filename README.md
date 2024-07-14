@@ -148,6 +148,17 @@
      sudo systemctl restart nginx
      ```
 
+## Step N: (Configure DNS - Domain)
+
+1. Go to your domain provider website > DNS settings
+1. Create a new **A Record** type with following details
+
+   - `Host`: **@** and **www** for direct domain or go for subdomain eg: **api**
+   - `Value/Data`: Your server's **IP** address
+   - `TTL`: Default or `600 seconds` or `30 mins`
+
+     ![DNS A Record (Windows)](/assets/img/dns_config.png?raw=true 'DNS A Record')
+
 ## Step N: (Configuring Github Actions)
 
 1. **Create a Runner.**
