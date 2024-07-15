@@ -59,7 +59,7 @@
 
 1. **Install Git**
 
-   Be as root user
+   Be as new user, because when you create runner we use non-root user and where the runner needs access to node & pm2 build the app.
 
    ```sh
    apt install git
@@ -170,23 +170,27 @@
    Download
 
    ```
-   # Create a folder
-   $ mkdir actions-runner && cd actions-runner# Download the latest runner package
+    # Create a folder
+    $ mkdir actions-runner && cd actions-runner
 
-   $ curl -o actions-runner-linux-x64-2.313.0.tar.gz -L https://github.com/actions/runner/releases/download/v2.313.0/actions-runner-linux-x64-2.313.0.tar.gz# Optional: Validate the hash
+    # Download the latest runner package
+    $ curl -o actions-runner-linux-x64-2.317.0.tar.gz -L https://github.com/actions/runner/releases/download/v2.317.0/actions-runner-linux-x64-2.317.0.tar.gz
 
-   $ echo "sdfd  actions-runner-linux-x64-2.313.0.tar.gz" | shasum -a 256 -c# Extract the installer
+    # Optional: Validate the hash
+    $ echo "9e883d210df8c6028aff475475a457d380353f9d01877d51cc01a17b2a91161d  actions-runner-linux-x64-2.317.0.tar.gz" | shasum -a 256 -c
 
-   $ tar xzf ./actions-runner-linux-x64-2.313.0.tar.gz
+    # Extract the installer
+    $ tar xzf ./actions-runner-linux-x64-2.317.0.tar.gz
    ```
 
    Configure
 
    ```
-   # Create the runner and start the configuration experience
-   $ ./config.sh --url https://github.com/renishb10/yourrepo-api --token <something># Last step, run it!
+    # Create the runner and start the configuration experience
+    $ ./config.sh --url https://github.com/renishb10/fiveto9jobs-api --token <Get the Token from Github Settings/Runners>
 
-   $ ./run.sh
+    # Last step, run it!
+    $ ./run.sh
    ```
 
    Using your self-hosted runner
