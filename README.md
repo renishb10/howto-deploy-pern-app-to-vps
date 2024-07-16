@@ -20,6 +20,7 @@
    usermod -aG sudo <username>
    ```
 1. Secure SSH Access
+
    - Edit the SSH configuration file:
      ```sh
      nano /etc/ssh/sshd_config
@@ -39,8 +40,8 @@
      ssh-copy-id -p 2222 <username>@<your_server_ip>
      ```
      or manually copy the ssh public key on to the server's `~/.ssh/authorized_keys`
-1. Firewall Setup
-   Install UFW (Uncomplicated Firewall)
+
+1. Firewall Setup - Install UFW (Uncomplicated Firewall)
    ```sh
    apt install ufw
    ufw allow 2222/tcp
@@ -73,22 +74,33 @@
 
    - secure Postgresql:
 
-   ```sh
-   sudo -u postgres psql
-   \password postgres
-   \q
-   ```
+     ```sh
+     sudo -u postgres psql
+     \password postgres
+     \q
+     ```
 
    - Create a new database and user:
 
-   ```sh
-   sudo -u postgres createuser newuser
-   sudo -u postgres createdb newdb
-   sudo -u postgres psql
-   ALTER USER newuser WITH PASSWORD 'password';
-   GRANT ALL PRIVILEGES ON DATABASE newdb TO newuser;
-   \q
-   ```
+     ```sh
+     sudo -u postgres psql
+
+     # create DB
+     CREATE DATABASE <EXAMPLE_DB>;
+
+     # create user
+     CREATE USER <EXAMPLE_USER> WITH ENCRYPTED PASSWORD <YOUR PASSWORD>;
+
+
+     # connect to database "<EXAMPLE_DB>" as user "postgres".
+     \c <EXAMPLE_DB> postgres
+
+     # Grant privileges
+     GRANT ALL PRIVILEGES ON DATABASE <EXAMPLE_DB> TO <EXAMPLE_USER>;
+     GRANT ALL ON SCHEMA public TO <EXAMPLE_USER>;
+     GRANT USAGE ON SCHEMA public TO <EXAMPLE_USER>;
+     \q
+     ```
 
 1. **Install Node.js**
 
@@ -148,7 +160,7 @@
      sudo systemctl restart nginx
      ```
 
-## Step N: (Configure DNS - Domain)
+## Step 3: (Configure DNS - Domain)
 
 1. Go to your domain provider website > DNS settings
 1. Create a new **A Record** type with following details
@@ -159,7 +171,19 @@
 
      ![DNS A Record (Windows)](/assets/img/dns_config.png?raw=true 'DNS A Record')
 
-## Step N: (Configuring Github Actions)
+#### Install SSL Certificate
+
+Install Let's Encrypt SSL (Free one), using `CertBot` script. Run the below commands for Ubuntu 20.x server. Visit https://certbot.eff.org/ for more details.
+
+```
+sudo snap install --classic certbot
+sudo ln -s /snap/bin/certbot /usr/bin/certbot
+sudo certbot --nginx
+```
+
+Check your domain, it should auto redirect to HTTPS
+
+## Step 4: (Configuring Github Actions)
 
 1. **Create a Runner.**
 
@@ -211,64 +235,289 @@
 
    Go to Actions -> Continous Integration -> Node.js (template) -> Configure
 
-   Sample Action:
+   - Sample Workflow:
 
-   ```
-       # This workflow will do a clean installation of node dependencies, cache/restore them, build the source code and run tests across different versions of node
-       # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-nodejs
+     ```
+         name: Deploy Fiveto9Jobs API
 
-       name: Deploy Fiveto9Jobs API
+         on:
+             push:
+                 branches: ['main']
+             pull_request:
+                 branches: ['main']
 
-       on:
-       push:
-           branches: [ "main" ]
-       pull_request:
-           branches: [ "main" ]
+         jobs:
+             build:
+                 runs-on: self-hosted
 
-       jobs:
-       build:
+                 steps:
+                     - uses: actions/checkout@v3
 
-           runs-on: self-hosted
+                     - name: Use Node.js '20'
+                     uses: actions/setup-node@v3
+                     with:
+                         node-version: '20'
+                         cache: 'npm'
 
-           steps:
-           - uses: actions/checkout@v3
-           - name: Use Node.js ${{ matrix.node-version }}
-               uses: actions/setup-node@v3
-               with:
-               node-version: ${{ matrix.node-version }}
-               cache: "npm"
+                     - name: Clean Previous Installations
+                     run: |
+                         rm -rf node_modules
+                         rm -rf .prisma
 
-           - run: npm ci
-           - run: |
-               touch .env
-               echo "${{secrets.ENV_SECRET_FILE}}" > .env
-           - run: |
-               pm2 stop <process-name>
-               pm2 start <process-name>
-               pm2 save
-               sudo service nginx restart
-   ```
+                     - name: Install Dependencies
+                     run: npm ci
 
-## Step N: (Setting up Postgresql)
+                     - name: Install pm2
+                     run: npm install -g pm2
 
-```
-CREATE DATABASE EXAMPLE_DB;
-CREATE USER EXAMPLE_USER WITH ENCRYPTED PASSWORD 'Sup3rS3cret';
-GRANT ALL PRIVILEGES ON DATABASE EXAMPLE_DB TO EXAMPLE_USER;
-\c EXAMPLE_DB postgres
-# You are now connected to database "EXAMPLE_DB" as user "postgres".
-GRANT ALL ON SCHEMA public TO EXAMPLE_USER;
-GRANT USAGE ON SCHEMA public TO EXAMPLE_USER;
-```
+                     - name: Set Environment Variables
+                     run: |
+                         touch .env
+                         echo "${{secrets.GITHUB_SECRETS}}" > .env
 
-## Step N: (Install SSL Certificate)
+                     - name: Run Prisma Migrations
+                     run: npx prisma migrate deploy
 
-Install Let's Encrypt SSL (Free one), using `CertBot` script. Run the below commands for Ubuntu 20.x server. Visit https://certbot.eff.org/ for more details.
+                     - name: Stop pm2 Process (if running)
+                     run: |
+                     pm2 stop <PROCESS NAME> || true
 
-```
-sudo snap install --classic certbot
-sudo ln -s /snap/bin/certbot /usr/bin/certbot
-sudo certbot --nginx
-```
+                     - name: Start pm2 Process
+                     run: |
+                         pm2 start ecosystem.config.js --env production
+                         pm2 save
 
-Check your domain, it should auto redirect to HTTPS
+                     - name: Restart Nginx
+                     run: sudo service nginx restart
+     ```
+
+   - Sample `ecosystem.config.js`
+
+     ```
+     module.exports = {
+         apps: [
+             {
+                 name: <PROCESS NAME>,
+                 script: 'npm',
+                 args: 'start',
+                 cwd: '/home/user/apps/actions-runner/_work/project/project',
+                 env: {
+                     NODE_ENV: 'production',
+                 },
+             },
+         ],
+     };
+
+     ```
+
+## Step 5: Monitoring: (Install Prometheus and Grafana)
+
+Let us install Prometheus and Grafana for monitoring our VPS server
+
+#### Install Prometheus
+
+- Go to [Prometheus website](https://prometheus.io/download/) and get the latest prometheus release download link.
+
+  ```sh
+  # download and unzip
+  wget <download link>
+  tar xvfz prometheus-*.tar.gz
+
+  # move it to /etc/prometheus
+  sudo mv prometheus-x.x.x.linux-amd64 /etc/prometheus
+
+  # delete the download if you want
+  rm prometheus-x.x.x.linux-amd64.tar.gz
+  ```
+
+- Create a Prometheus service
+
+  ```sh
+  vi /etc/systemd/system/prometheus.service
+  ```
+
+  And paste the below code
+
+  ```
+  [Unit]
+  Description=Prometheus
+  Wants=network-online.target
+  After=network-online.target
+
+  [Service]
+  ExecStart=/etc/prometheus/prometheus --config.file=/etc/prometheus/prometheus.yml
+  Restart=always
+
+  [Install]
+  WantedBy=multi-user.target
+  ```
+
+  Start and Enable the Prometheus Service
+
+  ```sh
+  sudo systemctl daemon-reload
+  sudo systemctl start prometheus
+  sudo systemctl enable prometheus
+
+  sudo systemctl status prometheus
+  ```
+
+- Adjust firewall and visit Prometheus CPanel
+
+  ```sh
+  sudo ufw allow 9090/tcp
+  sudo ufw status
+  ```
+
+  then visit -> **ServerIP:9090** you should see
+
+  ![Prometheus CPanel](/assets/img/prometheus_cpanel.png?raw=true 'Prometheus CPanel')
+
+#### Setup Node Exporter
+
+- Go to [Prometheus website](https://prometheus.io/download/) and but this time get the latest Node Exporter download link.
+
+  ```sh
+  # download and unzip
+  wget <download node_exporter link>
+  tar xvfz node_exporter*.tar.gz
+
+  # move it to /etc/node_exporter
+  sudo mv node_exporter-x.x.x.linux-amd64 /etc/node_exporter
+
+  # delete the download if you want
+  rm node_exporter-x.x.x.linux-amd64.tar.gz
+  ```
+
+- Create a Node Exporter service
+
+  ```sh
+  vi /etc/systemd/system/node_exporter.service
+  ```
+
+  And paste the below code
+
+  ```
+  [Unit]
+  Description=Node Exporter
+  Wants=network-online.target
+  After=network-online.target
+
+  [Service]
+  ExecStart=/etc/node_exporter/node_exporter
+  Restart=always
+
+  [Install]
+  WantedBy=multi-user.target
+  ```
+
+  Start and Enable the Node Exporter Service
+
+  ```sh
+  sudo systemctl daemon-reload
+  sudo systemctl start node_exporter
+  sudo systemctl enable node_exporter
+
+  sudo systemctl status node_exporter
+  ```
+
+- Configure Prometheus
+
+  ```sh
+  sudo vi /etc/prometheus/prometheus.yml
+  ```
+
+  Replace your `prometheus.yml` with below code
+
+  ```yml
+  global:
+  scrape_interval: 15s
+
+  scrape_configs:
+    - job_name: node
+      static_configs:
+        - targets: ['<Your Server IP>:9100']
+  ```
+
+  Restart Prometheus service
+
+  ```
+  sudo systemctl restart prometheus
+  sudo systemctl status prometheus
+  ```
+
+- Check Prometheus CPanel for a new Node Exporter **Target**
+
+  Go to **Server IP:9090** > Status > Targets
+
+  ![Prometheus Targets](/assets/img/prometheus_targets.png?raw=true 'Prometheus Targets')
+
+  We should see new node exporter target metric like above
+
+#### Grafana Setup
+
+- Install Grafana
+
+  Go to [Grafana Website](https://grafana.com/grafana/download) and find the latest version and installation steps
+
+  ```sh
+  sudo apt-get install -y adduser libfontconfig1 musl
+
+  wget https://dl.grafana.com/enterprise/release/grafana-enterprise_x.x.x_amd64.deb
+
+  sudo dpkg -i grafana-enterprise_x.x.x_amd64.deb
+  ```
+
+  ```sh
+  # remove downloaded file
+  rm grafana-enterprise_x.x.x_amd64.deb
+  ```
+
+- Start and Enable Grafana Server service
+
+  ```sh
+  sudo systemctl daemon-reload
+  sudo systemctl start grafana-server
+  sudo systemctl enable grafana-server
+
+  sudo systemctl status grafana-server
+  ```
+
+- Adjust firewall
+
+  ```sh
+  sudo ufw allow 3000/tcp
+  sudo ufw status
+  ```
+
+- Grafana Dashboard Setup
+
+  Go to **ServerIP:3000** to see the Grafana Dashboard.
+
+  - Login with user **admin** and password **admin** for the first time.
+  - It prompts for new password, please go for it.
+
+  You should see
+
+  ![Grafana Welcome Page](assets/img/grafana_launch.png 'Prometheus Targets')
+
+- Add Prometheus as Data source
+
+  - Go to Grafana dashboard and click on **DATA SOURCES** then click on **Prometheus**
+
+  You should see
+
+  ![Grafana Data Source](assets/img/grafana_datasource.png 'Grafana Data Source')
+
+  Add your **ServerIP:9090** in the Connection > Prometheus Server URL input as like above.
+
+- Import Grafana Node Exporter Dashboard
+
+  - Go to [Grafana Labs Dashboard](https://grafana.com/grafana/dashboards/) and find the Node Exporter Full (Prometheus) dashboard and copy its ID. (**1860**)
+  - Now go to Local Grafana Dashboard **ServerIP:9090** and go to the Dashboard section, click on **New** and click on **Import**, then paste the ID (1860), we just copied and create dashboard.
+
+    ![Grafana Import Dashboard](assets/img/grafana_import_dashboard.png 'Grafana Import Dashboard')
+
+- Here we go! Node Exporter Dashboard is ready!
+
+  ![Grafana Node Exporter Dashboard](assets/img/grafana_node_dashboard.png 'Grafana Node Exporter Dashboard')
