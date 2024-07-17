@@ -2,7 +2,7 @@
 
 ## Step 1: (Setting up the Server)
 
-1. SSH or Putty login to the server. By default `root` user is available.
+1. **SSH or Putty login to the server.** By default `root` user is available.
 
    ```
    ssh root@<ip-address>
@@ -10,16 +10,16 @@
 
    ![Putty Login (Windows)](/assets/img/putty.jpg?raw=true 'Putty login')
 
-1. Update the System
+1. **Update the System**
    ```
    apt update && apt upgrade -y
    ```
-1. Create new user & give enough permissions
+1. **Create new user & give enough permissions**
    ```
    adduser <username>
    usermod -aG sudo <username>
    ```
-1. Secure SSH Access
+1. **Secure SSH Access**
 
    - Edit the SSH configuration file:
      ```sh
@@ -41,7 +41,7 @@
      ```
      or manually copy the ssh public key on to the server's `~/.ssh/authorized_keys`
 
-1. Firewall Setup - Install UFW (Uncomplicated Firewall)
+1. **Firewall Setup** - Install UFW (Uncomplicated Firewall)
    ```sh
    apt install ufw
    ufw allow 2222/tcp
@@ -456,7 +456,7 @@ Let us install Prometheus and Grafana for monitoring our VPS server
 
 #### Grafana Setup
 
-- Install Grafana
+- **Install Grafana**
 
   Go to [Grafana Website](https://grafana.com/grafana/download) and find the latest version and installation steps
 
@@ -473,7 +473,7 @@ Let us install Prometheus and Grafana for monitoring our VPS server
   rm grafana-enterprise_x.x.x_amd64.deb
   ```
 
-- Start and Enable Grafana Server service
+- **Start and Enable Grafana Server service**
 
   ```sh
   sudo systemctl daemon-reload
@@ -483,14 +483,14 @@ Let us install Prometheus and Grafana for monitoring our VPS server
   sudo systemctl status grafana-server
   ```
 
-- Adjust firewall
+- **Adjust firewall**
 
   ```sh
   sudo ufw allow 3000/tcp
   sudo ufw status
   ```
 
-- Grafana Dashboard Setup
+- **Grafana Dashboard Setup**
 
   Go to **ServerIP:3000** to see the Grafana Dashboard.
 
@@ -501,7 +501,7 @@ Let us install Prometheus and Grafana for monitoring our VPS server
 
   ![Grafana Welcome Page](assets/img/grafana_launch.png 'Prometheus Targets')
 
-- Add Prometheus as Data source
+- **Add Prometheus as Data source**
 
   - Go to Grafana dashboard and click on **DATA SOURCES** then click on **Prometheus**
 
@@ -511,7 +511,7 @@ Let us install Prometheus and Grafana for monitoring our VPS server
 
   Add your **ServerIP:9090** in the Connection > Prometheus Server URL input as like above.
 
-- Import Grafana Node Exporter Dashboard
+- **Import Grafana Node Exporter Dashboard**
 
   - Go to [Grafana Labs Dashboard](https://grafana.com/grafana/dashboards/) and find the Node Exporter Full (Prometheus) dashboard and copy its ID. (**1860**)
   - Now go to Local Grafana Dashboard **ServerIP:9090** and go to the Dashboard section, click on **New** and click on **Import**, then paste the ID (1860), we just copied and create dashboard.
