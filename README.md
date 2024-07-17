@@ -310,7 +310,7 @@ Check your domain, it should auto redirect to HTTPS
 
      ```
 
-## Step 5: Monitoring: (Install Prometheus and Grafana)
+## Step 5: Server Monitoring: (Install Prometheus and Grafana)
 
 Let us install Prometheus and Grafana for monitoring our VPS server
 
@@ -338,7 +338,7 @@ Let us install Prometheus and Grafana for monitoring our VPS server
 
   And paste the below code
 
-  ```
+  ```ini
   [Unit]
   Description=Prometheus
   Wants=network-online.target
@@ -397,7 +397,7 @@ Let us install Prometheus and Grafana for monitoring our VPS server
 
   And paste the below code
 
-  ```
+  ```ini
   [Unit]
   Description=Node Exporter
   Wants=network-online.target
@@ -521,3 +521,239 @@ Let us install Prometheus and Grafana for monitoring our VPS server
 - Here we go! Node Exporter Dashboard is ready!
 
   ![Grafana Node Exporter Dashboard](assets/img/grafana_node_dashboard.png 'Grafana Node Exporter Dashboard')
+
+## Step 6: Database Monitoring: (Multiple DBs & via Prometheus & Grafana)
+
+Assuming Prometheus and Grafana are already installed and setup from the step 5. Now let us install Postgres Exporter
+
+- **Download Postgres Exporter**
+
+  From [Postgres Github](https://github.com/prometheus-community/postgres_exporter/releases). Get the latest release link.
+
+  ```sh
+   wget https://github.com/prometheus-community/postgres_exporter/releases/download/vx.x.x/postgres_exporter-x.x.x.linux-amd64.tar.gz
+
+   # move it etc/postgres_exporter
+   sudo mv postgres_exporter-x.x.x.linux-amd64 /etc/postgres_exporter
+
+   # delete downloaded
+   rm postgres_exporter-x.x.x.linux-amd64
+  ```
+
+- **Create a PostgreSQL User for Monitoring**
+
+  ```sql
+  CREATE USER postgres_exporter WITH PASSWORD 'yourpassword';
+  ALTER USER postgres_exporter SET SEARCH_PATH TO pg_catalog;
+
+  -- Repeat the following commands for each database you want to monitor
+  GRANT CONNECT ON DATABASE yourdatabase1 TO postgres_exporter;
+  GRANT USAGE ON SCHEMA public TO postgres_exporter;
+  GRANT SELECT ON ALL TABLES IN SCHEMA public TO postgres_exporter;
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO postgres_exporter;
+
+  GRANT CONNECT ON DATABASE yourdatabase2 TO postgres_exporter;
+  GRANT USAGE ON SCHEMA public TO postgres_exporter;
+  GRANT SELECT ON ALL TABLES IN SCHEMA public TO postgres_exporter;
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO postgres_exporter;
+  ```
+
+- **Create Multiple PostgreSQL Exporter Services:**
+
+  Create a separate service file for each database exporter instance (e.g., /etc/systemd/system/postgres_exporter_db1.service and /etc/systemd/system/postgres_exporter_db2.service).
+
+  Example service file for postgres_exporter_db1:
+
+  ```ini
+  [Unit]
+  Description=Prometheus PostgreSQL Exporter for Database1
+  Wants=network-online.target
+  After=network-online.target
+
+  [Service]
+  User=postgres
+  Environment=DATA_SOURCE_NAME=postgresql://postgres_exporter:yourpassword@localhost:5432/yourdatabase1?sslmode=disable
+  ExecStart=/usr/local/bin/postgres_exporter --web.listen-address=:9187 --log.level=info
+  Restart=always
+
+  [Install]
+  WantedBy=multi-user.target
+  ```
+
+  Example service file for postgres_exporter_db2:
+
+  ```ini
+  [Unit]
+  Description=Prometheus PostgreSQL Exporter for Database2
+  Wants=network-online.target
+  After=network-online.target
+
+  [Service]
+  User=postgres
+  Environment=DATA_SOURCE_NAME=postgresql://postgres_exporter:yourpassword@localhost:5432/yourdatabase2?sslmode=disable
+  ExecStart=/usr/local/bin/postgres_exporter --web.listen-address=:9188 --log.level=info
+  Restart=always
+
+  [Install]
+  WantedBy=multi-user.target
+  ```
+
+- **Start and Enable the Services**
+
+  ```sh
+  sudo systemctl daemon-reload
+  sudo systemctl start postgres_exporter_db1
+  sudo systemctl enable postgres_exporter_db1
+  sudo systemctl start postgres_exporter_db2
+  sudo systemctl enable postgres_exporter_db2
+  ```
+
+- **Configure Prometheus**
+
+  - Edit Prometheus Configuration:
+
+    Edit your Prometheus configuration file (prometheus.yml) to add each PostgreSQL Exporter instance as a target:
+
+    ```yaml
+    scrape_configs:
+        - job_name: 'postgresql_db1'
+            static_configs:
+            - targets: ['localhost:9187']
+        - job_name: 'postgresql_db2'
+            static_configs:
+            - targets: ['localhost:9188']
+    ```
+
+  - Reload Prometheus Configuration:
+
+    ```sh
+    sudo systemctl reload prometheus
+    ```
+
+- **Visualize Metrics in Grafana**
+
+  - Add Prometheus Data Source:
+
+    - Open Grafana, and go to Configuration > Data Sources > Add data source.
+    - Select Prometheus and configure it with the URL http://SERVER_IP:9090.
+
+  - Import PostgreSQL Dashboards:
+
+    - Go to Create > Import.
+    - Find and import PostgreSQL dashboards from the Grafana Dashboards website. You may need to import multiple dashboards if you want separate dashboards for each database.
+    - Configure each imported dashboard to use the appropriate Prometheus data source.
+
+  - Customize Dashboards:
+
+    - Customize the imported dashboards to include metrics from each database. You can create separate panels for each database and configure the queries to pull data from the respective PostgreSQL Exporter instances.
+
+    Here we go! Postgres Grafana Dashboard is ready!
+
+    ![Grafana Postgres Exporter Dashboard](assets/img/grafana_postgres_dashboard.png 'Grafana Postgres Exporter Dashboard')
+
+## Step 7: Application Monitoring: (Express/Node Apps & via Prometheus & Grafana)
+
+- **Install `prom-client` NPM package**
+
+  Install this to your Express/Node Application
+
+  ```sh
+  npm i prom-client
+  ```
+
+- **Create, Define and Expose prom-client metrics**
+
+  ```js
+  // Create a Registry to register the metrics
+  const register = new promClient.Registry();
+
+  // Add a default label which is added to all metrics
+  register.setDefaultLabels({
+    app: 'fiveto9jobs-api',
+  });
+
+  // Enable the collection of default metrics
+  promClient.collectDefaultMetrics({ register });
+
+  // Create a custom counter metric for errors
+  const errorCounter = new promClient.Counter({
+    name: 'http_errors_total',
+    help: 'Total number of HTTP errors',
+    labelNames: ['method', 'path', 'status_code'],
+    registers: [register],
+  });
+
+  // Create a custom counter metric for requests
+  const requestCounter = new promClient.Counter({
+    name: 'http_requests_total',
+    help: 'Total number of HTTP requests',
+    labelNames: ['method', 'path', 'status_code'],
+    registers: [register],
+  });
+
+  // Middleware to count requests and errors
+  app.use((req, res, next) => {
+    res.on('finish', () => {
+      requestCounter.labels(req.method, req.path, res.statusCode).inc();
+      if (res.statusCode >= 400) {
+        errorCounter.labels(req.method, req.path, res.statusCode).inc();
+      }
+    });
+    next();
+  });
+
+  // Expose the metrics endpoint
+  app.get('/metrics', async (req, res) => {
+    res.set('Content-Type', register.contentType);
+    res.end(await register.metrics());
+  });
+  ```
+
+- **Adjust Firewall**
+
+  ```sh
+  sudo ufw allow <APP PORT>/tcp
+  sudo ufw status
+  ```
+
+- **Configure Prometheus**
+
+  ```yml
+    scrape_configs:
+    - job_name: 'express_app'
+        static_configs:
+        - targets: ['localhost:<APP PORT>']
+  ```
+
+- **Setup Grafana**
+
+  - Import NodeJS Application Dashboard from [Graphana Dashboards](https://grafana.com/grafana/dashboards/11159-nodejs-application-dashboard/)
+  - Add new Panels (Dashboard -> Add -> Visualization) and create four panels with below code
+
+    Total HTTP requests:
+
+    ```promql
+    sum(http_requests_total) by (status_code, path)
+    ```
+
+    Request rate:
+
+    ```promql
+    rate(http_requests_total[1m])
+    ```
+
+    Total HTTP errors:
+
+    ```promql
+    sum(http_errors_total) by (status_code, path)
+    ```
+
+    Error rate:
+
+    ```promql
+    rate(http_errors_total[1m])
+    ```
+
+    And here we go again! NodeJS Application Grafana Dashboard is ready!
+
+    ![Grafana NodeJS Application Dashboard](assets/img/grafana_nodejs_dashboard.png 'Grafana NodeJS Application Dashboard')
